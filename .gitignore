@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+jobs/
+scratch_*
+# Machine-specific static ffprobe fetched for local dev (see README)
+bin/
+# Local editor/harness config (contains machine-specific paths)
+.claude/

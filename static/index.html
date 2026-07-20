@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ClearView — AI Video Upscaler</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #141922;
+    --panel-2: #1b212d;
+    --border: #262e3d;
+    --text: #e7ecf3;
+    --muted: #8b97ab;
+    --accent: #4f8cff;
+    --accent-2: #6ee7ff;
+    --good: #3ddc84;
+    --warn: #ffb454;
+    --bad: #ff6b6b;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #16202e 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 40px 20px 80px; }
+  header { text-align: center; margin-bottom: 28px; }
+  .logo {
+    font-size: 30px; font-weight: 700; letter-spacing: -0.5px;
+    background: linear-gradient(90deg, var(--accent-2), var(--accent));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tagline { color: var(--muted); margin-top: 4px; font-size: 15px; }
+
+  .banner {
+    border-radius: var(--radius); padding: 12px 16px; margin-bottom: 18px;
+    font-size: 14px; display: none;
+  }
+  .banner.show { display: block; }
+  .banner.warn { background: rgba(255,180,84,.12); border: 1px solid rgba(255,180,84,.35); color: var(--warn); }
+  .banner.bad  { background: rgba(255,107,107,.12); border: 1px solid rgba(255,107,107,.35); color: var(--bad); }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px; margin-bottom: 18px;
+  }
+
+  /* Drop zone */
+  .drop {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 44px 20px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s;
+    background: var(--panel-2);
+  }
+  .drop:hover, .drop.drag { border-color: var(--accent); background: #1a2233; }
+  .drop .big { font-size: 17px; font-weight: 600; }
+  .drop .sub { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .drop svg { width: 42px; height: 42px; opacity: .8; margin-bottom: 10px; }
+
+  .fileinfo { display: none; margin-top: 16px; gap: 18px; flex-wrap: wrap; font-size: 14px; }
+  .fileinfo.show { display: flex; }
+  .fileinfo .k { color: var(--muted); }
+  .fileinfo b { color: var(--text); }
+
+  /* Options */
+  .opt-title { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 4px 0 10px; }
+  .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .choice {
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    cursor: pointer; background: var(--panel-2); transition: border-color .15s, background .15s;
+  }
+  .choice:hover { border-color: #35415a; }
+  .choice.sel { border-color: var(--accent); background: #17233c; }
+  .choice .name { font-weight: 600; font-size: 14px; }
+  .pill { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+    color: var(--good); background: rgba(61,220,132,.14); padding: 2px 6px; border-radius: 6px; margin-left: 4px; }
+  .estimate { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; min-height: 18px; }
+  .estimate.slow { color: var(--warn); font-weight: 600; }
+  .choice .desc { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 18px; }
+  @media (max-width: 620px) { .row2 { grid-template-columns: 1fr; } .choices { grid-template-columns: 1fr 1fr; } }
+
+  button.primary {
+    width: 100%; margin-top: 20px; padding: 14px; border: 0; border-radius: 12px;
+    font-size: 15px; font-weight: 700; cursor: pointer; color: #06121f;
+    background: linear-gradient(90deg, var(--accent-2), var(--accent));
+    transition: transform .08s, opacity .15s;
+  }
+  button.primary:hover { transform: translateY(-1px); }
+  button.primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  /* Progress */
+  .prog-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .prog-head .status { font-weight: 600; }
+  .prog-head .eta { color: var(--muted); font-size: 13px; }
+  .bar { height: 10px; background: var(--panel-2); border-radius: 999px; overflow: hidden; }
+  .bar > i {
+    display: block; height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width .4s ease;
+  }
+  .prog-sub { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .spinner { display:inline-block; width:13px; height:13px; border:2px solid var(--border);
+    border-top-color: var(--accent); border-radius:50%; animation: spin .8s linear infinite; vertical-align:-2px; margin-right:6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Comparison slider */
+  .cmp {
+    position: relative; width: 100%; border-radius: 12px; overflow: hidden;
+    user-select: none; touch-action: none; background: #000; margin-top: 6px;
+    border: 1px solid var(--border);
+  }
+  .cmp img { display: block; width: 100%; height: auto; }
+  .cmp .after { display: block; width: 100%; }
+  .cmp .before-wrap { position: absolute; top: 0; left: 0; height: 100%; width: 50%; overflow: hidden; }
+  .cmp .before { position: absolute; top: 0; left: 0; height: 100%; width: auto; max-width: none; image-rendering: auto; }
+  .cmp .divider { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: var(--accent-2); transform: translateX(-1px); }
+  .cmp .handle {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 34px; height: 34px; border-radius: 50%; background: var(--accent-2);
+    box-shadow: 0 2px 10px rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center;
+    color: #06121f; font-size: 14px; cursor: ew-resize;
+  }
+  .cmp .lbl {
+    position: absolute; top: 10px; font-size: 11px; font-weight: 700; letter-spacing: .5px;
+    padding: 3px 8px; border-radius: 6px; background: rgba(0,0,0,.55); color: #fff; text-transform: uppercase;
+  }
+  .cmp .lbl.l { left: 10px; }
+  .cmp .lbl.r { right: 10px; }
+
+  .result-meta { display: flex; gap: 22px; flex-wrap: wrap; margin: 16px 0; font-size: 14px; }
+  .result-meta .k { color: var(--muted); }
+  a.download {
+    display: block; text-align: center; text-decoration: none; margin-top: 6px;
+    padding: 14px; border-radius: 12px; font-weight: 700; color: #06121f;
+    background: linear-gradient(90deg, var(--good), #7ef0aa);
+  }
+  .hidden { display: none !important; }
+  .foot { text-align:center; color: var(--muted); font-size: 12px; margin-top: 26px; }
+  .foot a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">ClearView</div>
+    <div class="tagline">Local AI video &amp; image upscaling — up to 4K, on your own machine</div>
+  </header>
+
+  <div class="banner warn" id="cpuBanner"></div>
+  <div class="banner bad" id="toolBanner"></div>
+  <div class="banner bad" id="errBanner"></div>
+
+  <!-- Step 1: upload + options -->
+  <section class="card" id="setupCard">
+    <div class="drop" id="drop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16V4m0 0l-4 4m4-4l4 4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round"/></svg>
+      <div class="big">Drag &amp; drop a video or image, or click to browse</div>
+      <div class="sub">Video (MP4, MOV, WebM…) or image (PNG, JPG, WebP…) &nbsp;·&nbsp; up to 500 MB</div>
+      <input type="file" id="fileInput" accept="video/*,image/*" class="hidden" />
+    </div>
+
+    <div class="fileinfo" id="fileInfo">
+      <div><span class="k">File:</span> <b id="fiName">—</b></div>
+      <div><span class="k" id="fiKindLabel">Type:</span> <b id="fiKind">—</b></div>
+      <div><span class="k">Resolution:</span> <b id="fiRes">—</b></div>
+      <div id="fiDurWrap"><span class="k">Duration:</span> <b id="fiDur">—</b></div>
+      <div><span class="k">Size:</span> <b id="fiSize">—</b></div>
+    </div>
+
+    <div class="row2">
+      <div>
+        <div class="opt-title">Model</div>
+        <div class="choices" id="models" style="grid-template-columns:1fr;">
+          <div class="choice sel" data-model="realesr-animevideov3">
+            <div class="name">AnimeVideo v3 <span class="pill">recommended</span></div>
+            <div class="desc">Fast · great default for video &amp; footage</div>
+          </div>
+          <div class="choice" data-model="realesrgan-x4plus">
+            <div class="name">x4plus</div>
+            <div class="desc">Max detail · <b>~30× slower</b> — short clips only</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="opt-title">Scale</div>
+        <div class="choices" id="scales">
+          <div class="choice sel" data-scale="2">
+            <div class="name">2×</div>
+            <div class="desc">Doubles resolution</div>
+          </div>
+          <div class="choice" data-scale="4">
+            <div class="name">4×</div>
+            <div class="desc">Quadruples, capped at 4K</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:18px;" id="speedSection">
+      <div class="opt-title">Speed vs. quality</div>
+      <div class="choices" id="speeds" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="choice sel" data-speed="fast">
+          <div class="name">Fast <span class="pill">default</span></div>
+          <div class="desc">Works at ~360p · fastest · great for low-quality clips</div>
+        </div>
+        <div class="choice" data-speed="balanced">
+          <div class="name">Balanced</div>
+          <div class="desc">Works at ~540p · ~2× slower · more fidelity</div>
+        </div>
+        <div class="choice" data-speed="full">
+          <div class="name">Max</div>
+          <div class="desc">Full source res · slowest · sharpest input</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="estimate" id="estimate"></div>
+    <button class="primary" id="startBtn" disabled>Upscale video</button>
+  </section>
+
+  <!-- Step 2: progress -->
+  <section class="card hidden" id="progressCard">
+    <div class="prog-head">
+      <div class="status"><span class="spinner"></span><span id="statusText">Queued…</span></div>
+      <div class="eta" id="etaText"></div>
+    </div>
+    <div class="bar"><i id="barFill"></i></div>
+    <div class="prog-sub" id="progSub">Preparing…</div>
+
+    <div id="livePreview" class="hidden" style="margin-top:18px;">
+      <div class="opt-title">Live preview — drag to compare</div>
+      <div class="cmp" id="liveCmp"></div>
+    </div>
+  </section>
+
+  <!-- Step 3: result -->
+  <section class="card hidden" id="resultCard">
+    <div class="opt-title">Done — drag the divider to compare</div>
+    <div class="cmp" id="resultCmp"></div>
+    <div class="result-meta">
+      <div><span class="k">Output:</span> <b id="rMeta">—</b></div>
+      <div><span class="k">Size:</span> <b id="rSize">—</b></div>
+    </div>
+    <a class="download" id="downloadBtn" href="#">⬇ Download upscaled MP4</a>
+    <button class="primary" id="againBtn" style="background:var(--panel-2);color:var(--text);">Upscale another file</button>
+  </section>
+
+  <div class="foot">
+    AI upscaling sharpens and invents plausible detail — it can't recover what was never filmed.
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let selectedFile = null;
+let model = "realesr-animevideov3";
+let scale = 2;
+let pollTimer = null;
+let livePreviewShown = false;
+let kind = "video";            // "video" or "image", from the selected file
+let speed = "fast";
+let speedTable = null;         // seconds per input-megapixel, from /api/health
+let speedPresets = null;       // preset -> max input height, from /api/health
+let onCpu = false;
+let probed = { w: 0, h: 0, dur: 0 };  // from the client-side <video> probe
+
+// --- Health check -----------------------------------------------------------
+fetch("/api/health").then(r => r.json()).then(h => {
+  if (h.missing_tools && h.missing_tools.length) {
+    const b = $("toolBanner");
+    b.textContent = "⚠ Missing on the server: " + h.missing_tools.join(", ") +
+      ". Install ffmpeg (it includes ffprobe) and restart ClearView.";
+    b.classList.add("show");
+    $("startBtn").disabled = true;
+  }
+  speedTable = h.speed || null;
+  speedPresets = h.speed_presets || null;
+  if (h.running_on_cpu === true) { onCpu = true; showCpuWarning(); }
+  updateEstimate();
+}).catch(() => {
+  // The page couldn't reach its own backend — almost always because it was
+  // opened directly as a file, or the server isn't running.
+  const b = $("toolBanner");
+  const viaFile = location.protocol === "file:";
+  b.innerHTML = viaFile
+    ? "⚠ This page was opened as a file, so it can't reach the ClearView server. " +
+      "Run <code>uvicorn main:app</code> (or <code>./run-dev.sh</code>) and open " +
+      "<b>http://127.0.0.1:8000</b> instead."
+    : "⚠ Can't reach the ClearView server. Make sure it's running " +
+      "(<code>uvicorn main:app</code>) and reload this page.";
+  b.classList.add("show");
+  $("startBtn").disabled = true;
+});
+
+function showCpuWarning() {
+  const b = $("cpuBanner");
+  b.textContent = "Running on CPU — no compatible GPU was found, so upscaling will be slow.";
+  b.classList.add("show");
+}
+
+// --- Selectors --------------------------------------------------------------
+function wireChoices(containerId, attr, cb) {
+  $(containerId).querySelectorAll(".choice").forEach(el => {
+    el.addEventListener("click", () => {
+      $(containerId).querySelectorAll(".choice").forEach(c => c.classList.remove("sel"));
+      el.classList.add("sel");
+      cb(el.getAttribute(attr));
+    });
+  });
+}
+wireChoices("models", "data-model", v => { model = v; updateEstimate(); });
+wireChoices("scales", "data-scale", v => { scale = parseInt(v, 10); updateEstimate(); });
+wireChoices("speeds", "data-speed", v => { speed = v; updateEstimate(); });
+
+// --- Upload zone ------------------------------------------------------------
+const drop = $("drop"), fileInput = $("fileInput");
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("drag"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+drop.addEventListener("drop", e => {
+  e.preventDefault(); drop.classList.remove("drag");
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) handleFile(fileInput.files[0]);
+});
+
+function fmtBytes(n) {
+  if (!n) return "—";
+  const u = ["B","KB","MB","GB"]; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(n < 10 && i > 0 ? 1 : 0) + " " + u[i];
+}
+function fmtDur(s) {
+  if (!s || s < 0) return "—";
+  const m = Math.floor(s / 60), sec = Math.round(s % 60);
+  return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+const IMG_RE = /\.(png|jpe?g|webp|bmp|tiff?|gif)$/i;
+const VID_RE = /\.(mp4|mov|webm|mkv|avi|m4v)$/i;
+
+function handleFile(file) {
+  const isImage = file.type.startsWith("image/") ||
+    (!file.type.startsWith("video/") && IMG_RE.test(file.name));
+  const isVideo = file.type.startsWith("video/") || VID_RE.test(file.name);
+  if (!isImage && !isVideo) {
+    showError("That doesn't look like a video or image file.");
+    return;
+  }
+  kind = isImage ? "image" : "video";
+  selectedFile = file;
+  $("errBanner").classList.remove("show");
+  $("fiName").textContent = file.name;
+  $("fiKind").textContent = isImage ? "Image" : "Video";
+  $("fiSize").textContent = fmtBytes(file.size);
+  $("fiRes").textContent = "reading…";
+  $("fileInfo").classList.add("show");
+  $("startBtn").disabled = false;
+
+  // Duration and the Speed control only apply to video.
+  $("fiDurWrap").style.display = isImage ? "none" : "";
+  $("speedSection").style.display = isImage ? "none" : "";
+  $("startBtn").textContent = isImage ? "Upscale image" : "Upscale video";
+
+  if (isImage) {
+    const img = new Image();
+    img.onload = () => {
+      probed = { w: img.naturalWidth, h: img.naturalHeight, dur: 0 };
+      $("fiRes").textContent = `${img.naturalWidth}×${img.naturalHeight}`;
+      updateEstimate();
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => { $("fiRes").textContent = "—"; };
+    img.src = URL.createObjectURL(file);
+  } else {
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.onloadedmetadata = () => {
+      $("fiRes").textContent = v.videoWidth ? `${v.videoWidth}×${v.videoHeight}` : "—";
+      $("fiDur").textContent = fmtDur(v.duration);
+      probed = { w: v.videoWidth, h: v.videoHeight, dur: v.duration || 0 };
+      updateEstimate();
+      URL.revokeObjectURL(v.src);
+    };
+    v.onerror = () => { $("fiRes").textContent = "—"; $("fiDur").textContent = "—"; };
+    v.src = URL.createObjectURL(file);
+  }
+}
+
+// Rough up-front time estimate so slow combinations (esp. x4plus) are obvious.
+// frames ≈ duration × ~30fps; cost ≈ frames × input-megapixels × table[model|scale].
+const ASSUMED_FPS = 30;
+function updateEstimate() {
+  const el = $("estimate");
+  if (!selectedFile || !probed.w || !speedTable) { el.textContent = ""; return; }
+
+  if (kind === "image") {  // single frame at full res — quick
+    const mp = (probed.w * probed.h) / 1e6;
+    let secs = mp * (speedTable[`${model}|${scale}`] || 0.6);
+    if (onCpu) secs *= 12;
+    el.textContent = `Estimated time: ~${secs < 1 ? "1s" : fmtDur(secs)}`;
+    el.classList.toggle("slow", secs > 30);
+    return;
+  }
+
+  // Working resolution: the speed preset can cap the input height fed to the AI.
+  const cap = speedPresets ? speedPresets[speed] : 0;
+  const capped = cap > 0 && cap < probed.h;
+  const workH = capped ? cap : probed.h;
+  const workW = capped ? Math.round(probed.w * cap / probed.h) : probed.w;
+  // Capped runs use the efficient 4x model; uncapped uses the chosen scale.
+  const k = speedTable[`${model}|${capped ? 4 : scale}`];
+  if (!k) { el.textContent = ""; return; }
+
+  const frames = Math.max(Math.round(probed.dur * ASSUMED_FPS), 1);
+  const workMP = (workW * workH) / 1e6;
+  let secs = frames * workMP * k;
+  if (onCpu) secs *= 12;  // CPU is roughly an order of magnitude slower
+
+  let note = `Estimated time: ~${fmtDur(secs)} · ~${frames} frames`;
+  if (capped) note += ` · AI works at ${workW}×${workH}`;
+  el.textContent = note;
+  el.classList.toggle("slow", secs > 180);  // flag anything over ~3 min
+}
+
+function showError(msg) {
+  const b = $("errBanner");
+  b.textContent = "✕ " + msg;
+  b.classList.add("show");
+}
+
+// --- Start job --------------------------------------------------------------
+$("startBtn").addEventListener("click", async () => {
+  if (!selectedFile) return;
+  $("startBtn").disabled = true;
+  $("errBanner").classList.remove("show");
+
+  const fd = new FormData();
+  fd.append("file", selectedFile);
+  fd.append("model", model);
+  fd.append("scale", String(scale));
+  fd.append("speed", speed);
+
+  try {
+    const res = await fetch("/api/jobs", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Upload failed.");
+    $("setupCard").classList.add("hidden");
+    $("progressCard").classList.remove("hidden");
+    livePreviewShown = false;
+    poll(data.job_id);
+  } catch (e) {
+    // A TypeError from fetch means the request never reached the server.
+    const unreachable = e instanceof TypeError;
+    showError(unreachable
+      ? "Couldn't reach the ClearView server. Make sure it's running " +
+        "(uvicorn main:app) and that you opened http://127.0.0.1:8000."
+      : e.message);
+    $("startBtn").disabled = false;
+  }
+});
+
+// --- Poll job ---------------------------------------------------------------
+function poll(jobId) {
+  const tick = async () => {
+    let job;
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`);
+      job = await res.json();
+      if (!res.ok) throw new Error(job.detail || "Lost track of the job.");
+    } catch (e) {
+      $("statusText").textContent = "Connection lost — retrying…";
+      pollTimer = setTimeout(tick, 2000);
+      return;
+    }
+
+    renderProgress(job);
+
+    if (job.status === "done") { finish(jobId, job); return; }
+    if (job.status === "error") { fail(job); return; }
+    pollTimer = setTimeout(tick, 1000);
+  };
+  tick();
+}
+
+function renderProgress(job) {
+  const map = { queued: "Queued…", processing: "Upscaling…", done: "Finished", error: "Error" };
+  $("statusText").textContent = map[job.status] || job.status;
+  $("barFill").style.width = (job.progress || 0) + "%";
+
+  if (job.input_meta && job.input_meta.resolution) {
+    if (job.kind === "image") {
+      $("progSub").textContent = `${job.input_meta.resolution} · upscaling image…`;
+    } else {
+      let sub = `${job.input_meta.resolution} · ${job.input_meta.fps} fps`;
+      if (job.total_frames) sub += ` · frame ${job.done_frames}/${job.total_frames} (${job.progress}%)`;
+      $("progSub").textContent = sub;
+    }
+  }
+  $("etaText").textContent = job.eta_seconds != null ? "~" + fmtDur(job.eta_seconds) + " left" : "";
+
+  if (job.has_preview && !livePreviewShown) {
+    livePreviewShown = true;
+    $("livePreview").classList.remove("hidden");
+    buildCompare($("liveCmp"),
+      `/api/jobs/${job.id}/preview?which=before`,
+      `/api/jobs/${job.id}/preview?which=after`);
+  }
+}
+
+function fail(job) {
+  $("progressCard").classList.add("hidden");
+  $("setupCard").classList.remove("hidden");
+  $("startBtn").disabled = false;
+  showError(job.error || "Something went wrong while processing the video.");
+}
+
+function finish(jobId, job) {
+  $("progressCard").classList.add("hidden");
+  $("resultCard").classList.remove("hidden");
+  buildCompare($("resultCmp"),
+    `/api/jobs/${jobId}/preview?which=before`,
+    `/api/jobs/${jobId}/preview?which=after`);
+  const om = job.output_meta || {};
+  $("rMeta").textContent = (om.resolution || "—") + (om.fps ? ` · ${om.fps} fps` : "")
+    + (om.work_resolution ? ` · AI @ ${om.work_resolution}` : "");
+  $("rSize").textContent = fmtBytes(om.size_bytes);
+  $("downloadBtn").href = `/api/jobs/${jobId}/download`;
+  $("downloadBtn").textContent = job.kind === "image"
+    ? "⬇ Download upscaled image (PNG)" : "⬇ Download upscaled MP4";
+}
+
+$("againBtn").addEventListener("click", () => {
+  if (pollTimer) clearTimeout(pollTimer);
+  $("resultCard").classList.add("hidden");
+  $("setupCard").classList.remove("hidden");
+  selectedFile = null; fileInput.value = "";
+  $("fileInfo").classList.remove("show");
+  $("speedSection").style.display = "";
+  $("fiDurWrap").style.display = "";
+  $("startBtn").textContent = "Upscale video";
+  $("startBtn").disabled = true;
+  $("estimate").textContent = "";
+});
+
+// --- Before/After comparison slider ----------------------------------------
+function buildCompare(container, beforeUrl, afterUrl) {
+  container.innerHTML = `
+    <img class="after" alt="After">
+    <div class="before-wrap"><img class="before" alt="Before"></div>
+    <div class="divider"><div class="handle">⇄</div></div>
+    <span class="lbl l">Before</span>
+    <span class="lbl r">After</span>`;
+  const after = container.querySelector(".after");
+  const beforeWrap = container.querySelector(".before-wrap");
+  const before = container.querySelector(".before");
+  const divider = container.querySelector(".divider");
+
+  after.src = afterUrl;
+  before.src = beforeUrl;
+
+  function sizeBefore() {
+    // The "before" image must render at the full container width so both
+    // layers line up pixel-for-pixel regardless of the clip position.
+    before.style.width = container.clientWidth + "px";
+  }
+  after.onload = sizeBefore;
+  before.onload = sizeBefore;
+  window.addEventListener("resize", sizeBefore);
+
+  function setPos(clientX) {
+    const rect = container.getBoundingClientRect();
+    let pct = ((clientX - rect.left) / rect.width) * 100;
+    pct = Math.max(0, Math.min(100, pct));
+    beforeWrap.style.width = pct + "%";
+    divider.style.left = pct + "%";
+  }
+
+  let dragging = false;
+  const start = () => dragging = true;
+  const stop = () => dragging = false;
+  const move = (e) => {
+    if (!dragging) return;
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    setPos(x);
+  };
+  container.addEventListener("pointerdown", e => { start(); setPos(e.clientX); });
+  window.addEventListener("pointerup", stop);
+  window.addEventListener("pointermove", move);
+  // Also allow click-anywhere to jump the divider.
+  container.addEventListener("click", e => setPos(e.clientX));
+}
+</script>
+</body>
+</html>
