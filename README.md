@@ -7,9 +7,27 @@ Nothing is sent to the cloud. ClearView uses
 `realesrgan-ncnn-py` package, with a FastAPI backend and a single
 self-contained web page.
 
+## Download (no setup required)
+
+Grab the app from the [**Releases**](../../releases/latest) page — it bundles
+everything (Python, the Real-ESRGAN engine + models, and ffmpeg), so there's
+nothing else to install:
+
+- **macOS (Apple Silicon):** `ClearView-x.y.z-macOS-arm64.dmg` — open it and drag
+  **ClearView** to Applications.
+- **Windows (x64):** `ClearView-x.y.z-Windows-x64-Setup.exe` — run it and follow
+  the installer.
+
+Just launch **ClearView** — it opens in its own window. (On first run, macOS
+Gatekeeper may warn that the app is unsigned: right-click it → **Open** →
+**Open**. On Windows, SmartScreen may show "More info → Run anyway.")
+
+Prefer to run from source instead? See [Run from source](#run-from-source) below.
+
 ## Features
 
 - **Videos and still images** — drop in an MP4/MOV/WebM… or a PNG/JPG/WebP…
+- **Standalone desktop app** for macOS and Windows — no Python, no terminal
 - Drag-and-drop upload with a modern dark UI (no build step, no React)
 - Two models: **AnimeVideo v3** (fast, great default for video) and
   **x4plus** (slower, maximum detail)
@@ -29,24 +47,32 @@ self-contained web page.
   of the box via MoltenVK; on Linux/Windows install your GPU vendor's drivers.
   Without a usable GPU, ClearView still runs on CPU — just much slower.
 
-## Setup
+## Run from source
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-## Run
-
-```bash
 uvicorn main:app
 ```
 
-Then open <http://127.0.0.1:8000> in your browser.
+Then open <http://127.0.0.1:8000> in your browser. (On macOS you can instead
+double-click **Start ClearView.command**, which starts the server and opens the
+browser for you.)
 
-The first upscale downloads/loads the model into the GPU and may take a moment;
-subsequent frames are much faster.
+The first upscale loads the model into the GPU and may take a moment; subsequent
+frames are much faster.
+
+## Building the desktop apps yourself
+
+The packaged apps are built with [PyInstaller](https://pyinstaller.org):
+
+- **macOS:** `bash packaging/build_mac.sh` → produces `dist/ClearView-*-macOS-arm64.dmg`
+  (fetches ffmpeg/ffprobe automatically and scrubs the build machine's username
+  from bundled metadata).
+- **Windows:** built in CI by [`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml)
+  — a Windows runner runs the same `clearview.spec` and packages an installer with
+  Inno Setup. Trigger it from the Actions tab (or push a `v*` tag).
 
 ## How it works
 

@@ -6,7 +6,9 @@ Then open: http://127.0.0.1:8000
 
 from __future__ import annotations
 
+import os
 import shutil
+import sys
 import time
 from pathlib import Path
 
@@ -16,8 +18,30 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 import upscaler
 from jobs import DONE, ERROR, JobManager
 
-BASE_DIR = Path(__file__).resolve().parent
-JOBS_DIR = BASE_DIR / "jobs"
+_FROZEN = getattr(sys, "frozen", False)
+
+
+def _resource_dir() -> Path:
+    """Where bundled read-only files (static/) live."""
+    if _FROZEN:
+        return Path(getattr(sys, "_MEIPASS", os.path.dirname(sys.executable)))
+    return Path(__file__).resolve().parent
+
+
+def _user_data_dir() -> Path:
+    """A per-user, writable directory for job files (used by the packaged app)."""
+    if sys.platform == "darwin":
+        root = Path.home() / "Library" / "Application Support"
+    elif sys.platform == "win32":
+        root = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+    else:
+        root = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    return root / "ClearView"
+
+
+BASE_DIR = _resource_dir()
+# When frozen, the app bundle is read-only, so jobs go to a user data folder.
+JOBS_DIR = (_user_data_dir() / "jobs") if _FROZEN else (BASE_DIR / "jobs")
 STATIC_DIR = BASE_DIR / "static"
 
 VALID_MODELS = set(upscaler.MODEL_LABELS)

@@ -1,0 +1,80 @@
+name: Build Windows installer
+
+# Builds the standalone Windows app (PyInstaller) + an Inno Setup installer and
+# attaches it to the GitHub Release for the given tag.
+#
+# Trigger manually from the Actions tab (choose the tag), or automatically when
+# a v* tag is pushed.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the installer to (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller pywebview
+
+      - name: Fetch ffmpeg + ffprobe (win64)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build_assets/win | Out-Null
+          foreach ($tool in @("ffmpeg","ffprobe")) {
+            Invoke-WebRequest -Uri "https://ffmpeg.martin-riedl.de/redirect/latest/windows/amd64/release/$tool.zip" -OutFile "$tool.zip"
+            Expand-Archive -Path "$tool.zip" -DestinationPath "build_assets/win" -Force
+          }
+          Get-ChildItem build_assets/win
+
+      - name: Build app with PyInstaller
+        run: pyinstaller clearview.spec --noconfirm --clean
+
+      - name: Resolve tag
+        id: tag
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like "refs/tags/*") {
+            $t = $env:GITHUB_REF -replace "refs/tags/",""
+          } else {
+            $t = "${{ github.event.inputs.tag }}"
+          }
+          "tag=$t" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "version=$($t -replace '^v','')" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          iscc /DMyAppVersion=${{ steps.tag.outputs.version }} packaging\clearview.iss
+
+      - name: Upload installer to the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $exe = Get-ChildItem dist\*Setup.exe | Select-Object -First 1
+          Write-Host "Uploading $($exe.FullName) to ${{ steps.tag.outputs.tag }}"
+          gh release upload ${{ steps.tag.outputs.tag }} $exe.FullName --clobber
+
+      - name: Also upload the installer as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClearView-Windows-Setup
+          path: dist/*Setup.exe

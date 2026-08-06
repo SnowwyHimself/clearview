@@ -24,6 +24,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from collections import deque
 from pathlib import Path
@@ -36,8 +37,21 @@ from jobs import ERROR, Job
 
 # --- External tools ----------------------------------------------------------
 
-FFMPEG = shutil.which("ffmpeg") or "ffmpeg"
-FFPROBE = shutil.which("ffprobe") or "ffprobe"
+
+def _resolve_tool(name: str) -> str:
+    """Locate ffmpeg/ffprobe: prefer a copy bundled inside the frozen app, then
+    fall back to whatever is on PATH (normal `uvicorn main:app` runs)."""
+    if getattr(sys, "frozen", False):
+        base = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+        exe = name + (".exe" if sys.platform == "win32" else "")
+        bundled = os.path.join(base, exe)
+        if os.path.exists(bundled):
+            return bundled
+    return shutil.which(name) or name
+
+
+FFMPEG = _resolve_tool("ffmpeg")
+FFPROBE = _resolve_tool("ffprobe")
 
 # --- Limits ------------------------------------------------------------------
 
@@ -120,12 +134,19 @@ SPEED_S_PER_INPUT_MP = {
 # --- Tool / engine availability ---------------------------------------------
 
 
+def _tool_ok(path: str, name: str) -> bool:
+    # An absolute bundled path just needs to exist; a bare name must be on PATH.
+    if os.path.isabs(path):
+        return os.path.exists(path)
+    return shutil.which(path) is not None or shutil.which(name) is not None
+
+
 def check_tools() -> list[str]:
     """Return a list of required external tools that are missing."""
     missing = []
-    if shutil.which(FFMPEG) is None and shutil.which("ffmpeg") is None:
+    if not _tool_ok(FFMPEG, "ffmpeg"):
         missing.append("ffmpeg")
-    if shutil.which(FFPROBE) is None and shutil.which("ffprobe") is None:
+    if not _tool_ok(FFPROBE, "ffprobe"):
         missing.append("ffprobe")
     return missing
 
