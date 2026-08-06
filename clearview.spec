@@ -26,14 +26,30 @@ tool_binaries = [
     (str(tool_dir / f"ffprobe{tool_ext}"), "."),
 ]
 
+# --- Collect the web stack fully (dynamic imports don't always get picked up) -
+web_datas, web_binaries, web_hidden = [], [], []
+for pkg in ("uvicorn", "fastapi", "starlette", "pydantic", "pydantic_core", "anyio"):
+    d, b, h = collect_all(pkg)
+    web_datas += d
+    web_binaries += b
+    web_hidden += h
+
 # --- App source + web UI -----------------------------------------------------
-datas = re_datas + [("static", "static")]
-binaries = re_binaries + tool_binaries
+datas = re_datas + web_datas + [("static", "static")]
+binaries = re_binaries + web_binaries + tool_binaries
 hiddenimports = (
-    re_hidden
+    re_hidden + web_hidden
     + collect_submodules("uvicorn")
-    + ["main", "upscaler", "jobs", "webview"]
+    + ["main", "upscaler", "jobs"]
 )
+
+# The native-window library (pywebview + .NET/pythonnet) is used on macOS/Linux
+# only; on Windows we open the browser instead, so keep that fragile stack out.
+if IS_WIN:
+    excludes = ["tkinter", "webview", "clr", "pythonnet", "System"]
+else:
+    hiddenimports += ["webview"]
+    excludes = ["tkinter"]
 
 icon_mac = "packaging/clearview.icns"
 icon_win = "packaging/clearview.ico"
@@ -46,7 +62,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=["tkinter"],
+    excludes=excludes,
     noarchive=False,
 )
 
@@ -58,7 +74,9 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="ClearView",
-    console=False,
+    # Windows: a small console window shows status, keeps the app alive, and
+    # makes any error readable. macOS: no console (the .app is the window).
+    console=IS_WIN,
     disable_windowed_traceback=False,
     icon=(icon_win if IS_WIN else icon_mac),
 )
