@@ -38,10 +38,13 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path build_assets/win | Out-Null
-          foreach ($tool in @("ffmpeg","ffprobe")) {
-            Invoke-WebRequest -Uri "https://ffmpeg.martin-riedl.de/redirect/latest/windows/amd64/release/$tool.zip" -OutFile "$tool.zip"
-            Expand-Archive -Path "$tool.zip" -DestinationPath "build_assets/win" -Force
-          }
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+          Invoke-WebRequest -Uri $url -OutFile ffmpeg.zip
+          Expand-Archive -Path ffmpeg.zip -DestinationPath fftmp -Force
+          $ffmpeg  = Get-ChildItem -Recurse -Path fftmp -Filter ffmpeg.exe  | Select-Object -First 1
+          $ffprobe = Get-ChildItem -Recurse -Path fftmp -Filter ffprobe.exe | Select-Object -First 1
+          Copy-Item $ffmpeg.FullName  build_assets/win/ffmpeg.exe  -Force
+          Copy-Item $ffprobe.FullName build_assets/win/ffprobe.exe -Force
           Get-ChildItem build_assets/win
 
       - name: Build app with PyInstaller
