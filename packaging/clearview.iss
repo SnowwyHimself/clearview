@@ -9,16 +9,17 @@
 #endif
 
 [Setup]
-AppId={{C1EA5B10-9E5D-4C2E-9C1F-CLEARVIEW0001}
+AppId={{C1EA5B10-9E5D-4C2E-9C1F-A1B2C3D40001}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher=Snowwy
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-OutputDir=dist
+; Paths below are relative to THIS .iss file (packaging\), so step up to repo root.
+OutputDir=..\dist
 OutputBaseFilename=ClearView-{#MyAppVersion}-Windows-x64-Setup
-SetupIconFile=packaging\clearview.ico
+SetupIconFile=clearview.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -29,7 +30,7 @@ PrivilegesRequired=lowest
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 
 [Files]
-Source: "dist\ClearView\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\dist\ClearView\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\ClearView.exe"
